@@ -79,6 +79,9 @@ pub const PINGREQ: [u8; 2] = [0xc0, 0x00];
 pub const DISCONNECT: [u8; 2] = [0xe0, 0x00];
 /// SUBSCRIBE dont les flags valent 0000 au lieu de 0010 (paquet malformé).
 pub const SUBSCRIBE_MALFORME: [u8; 7] = [0x80, 0x05, 0x00, 0x01, 0x00, 0x01, b'a'];
+/// PUBLISH dont le topic annonce 200 octets alors que le paquet n'en contient
+/// que 2 : une longueur mensongère, sur le principe de la faille Heartbleed.
+pub const PUBLISH_LONGUEUR_MENSONGERE: [u8; 6] = [0x30, 0x04, 0x00, 0xc8, b'a', b'b'];
 /// PUBLISH dont le topic contient ESC [ 2 J (« efface l'écran »).
 pub const PUBLISH_TOPIC_PIEGE: [u8; 11] = [
     0x30, 0x09, 0x00, 0x05, b'a', 0x1b, b'[', b'2', b'J', b'O', b'K',
@@ -110,12 +113,13 @@ pub struct Conversation {
 }
 
 impl Conversation {
-    /// ISN du client : 1000 ; ISN du broker : 5000.
-    pub fn new() -> Self {
+    /// ISN du client : 1000 ; ISN du broker : 5000. La première trame est
+    /// horodatée à `start` (temps écoulé depuis le 1er janvier 1970).
+    pub fn starting_at(start: Duration) -> Self {
         Conversation {
             client_seq: 1000,
             broker_seq: 5000,
-            time: Duration::from_secs(1_700_000_000),
+            time: start,
             frames: Vec::new(),
         }
     }
@@ -261,14 +265,26 @@ pub struct Scenario {
     pub frames: Vec<(Duration, Vec<u8>)>,
 }
 
-/// Tous les scénarios de test.
+/// Date de départ par défaut des scénarios : le 1er janvier 2026 à 00:00:00 UTC.
+///
+/// Elle est fixe pour que les captures soient identiques octet pour octet à
+/// chaque génération : un scénario rejoué donne toujours exactement le même
+/// résultat, chez tout le monde.
+pub const DEFAULT_START: Duration = Duration::from_secs(1_767_225_600);
+
+/// Tous les scénarios de test, à partir de la date par défaut.
 pub fn scenarios() -> Vec<Scenario> {
+    scenarios_at(DEFAULT_START)
+}
+
+/// Tous les scénarios de test, la première trame étant horodatée à `start`.
+pub fn scenarios_at(start: Duration) -> Vec<Scenario> {
     vec![
         Scenario {
             name: "session-normale",
             description: "connexion, CONNECT, CONNACK, PUBLISH, DISCONNECT, fermeture",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 c.client_sends(&PUBLISH);
                 c.client_sends(&DISCONNECT);
@@ -280,7 +296,7 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "message-coupe",
             description: "un PUBLISH réparti sur deux segments TCP",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 c.client_sends(&PUBLISH[..10]);
                 c.client_sends(&PUBLISH[10..]);
@@ -292,7 +308,7 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "segment-perdu",
             description: "le segment du PUBLISH n'est jamais capturé, puis un PINGREQ",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 let _perdu = c.client_segment(&PUBLISH);
                 c.client_sends(&PINGREQ);
@@ -303,7 +319,7 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "desordre",
             description: "le PINGREQ arrive avant le PUBLISH qui le précède",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 let publish = c.client_segment(&PUBLISH);
                 let pingreq = c.client_segment(&PINGREQ);
@@ -316,9 +332,20 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "anomalie",
             description: "un SUBSCRIBE malformé, puis un PINGREQ valide",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 c.client_sends(&SUBSCRIBE_MALFORME);
+                c.client_sends(&PINGREQ);
+                c.into_frames()
+            },
+        },
+        Scenario {
+            name: "longueur-mensongere",
+            description: "un topic qui annonce 200 octets alors que le paquet n'en contient que 2",
+            frames: {
+                let mut c = Conversation::starting_at(start);
+                c.mqtt_session();
+                c.client_sends(&PUBLISH_LONGUEUR_MENSONGERE);
                 c.client_sends(&PINGREQ);
                 c.into_frames()
             },
@@ -327,7 +354,7 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "rst-forge",
             description: "un RST au numéro de séquence décalé, puis un PUBLISH",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 c.forged_client_reset(1);
                 c.client_sends(&PUBLISH);
@@ -338,7 +365,7 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "topic-piege",
             description: "un PUBLISH dont le topic contient une séquence d'échappement",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 c.client_sends(&PUBLISH_TOPIC_PIEGE);
                 c.into_frames()
@@ -348,7 +375,7 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "insertion-checksum",
             description: "un faux PUBLISH au checksum invalide, puis le vrai au même numéro",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 c.mqtt_session();
                 let mut forge = c.forged_client_segment(&PUBLISH_FORGE);
                 corrupt_tcp_checksum(&mut forge);
@@ -361,7 +388,7 @@ pub fn scenarios() -> Vec<Scenario> {
             name: "connexion-deja-ouverte",
             description: "capture démarrée en cours de connexion, au milieu d'un message",
             frames: {
-                let mut c = Conversation::new();
+                let mut c = Conversation::starting_at(start);
                 let _debut_manque = c.client_segment(&PUBLISH[..5]);
                 c.client_sends(&PUBLISH[5..]);
                 c.client_sends(&PINGREQ);

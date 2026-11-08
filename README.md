@@ -129,9 +129,9 @@ cargo run --example scenarios -- scenarios/
 cargo run -- --read scenarios/insertion-checksum.pcap --checksums all
 ```
 
-Huit captures fabriquées reproduisent des situations précises : message coupé,
-segment perdu, désordre, paquet malformé, RST forgé, topic piégé, insertion,
-connexion déjà ouverte.
+Neuf captures fabriquées reproduisent des situations précises : message coupé,
+segment perdu, désordre, paquet malformé, longueur mensongère, RST forgé, topic
+piégé, insertion, connexion déjà ouverte.
 
 ## Architecture
 

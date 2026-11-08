@@ -117,6 +117,17 @@ fn anomalie_signalee_une_fois() {
 }
 
 #[test]
+fn longueur_mensongere_signalee_sans_lecture_hors_limites() {
+    let lignes = rejouer("longueur-mensongere");
+    assert_eq!(
+        lignes.last().unwrap(),
+        "[ANOMALIE] le champ « topic name » dépasse la fin du paquet (suite du flux ignorée)"
+    );
+    // Le découpage est perdu : le PINGREQ qui suit n'est pas décodé.
+    assert!(!lignes.iter().any(|l| l == "MQTT PINGREQ"));
+}
+
+#[test]
 fn rst_forge_ignore_et_flux_toujours_decode() {
     let lignes = rejouer("rst-forge");
     assert_eq!(
@@ -197,6 +208,7 @@ fn chaque_scenario_est_teste() {
             "segment-perdu",
             "desordre",
             "anomalie",
+            "longueur-mensongere",
             "rst-forge",
             "topic-piege",
             "insertion-checksum",
