@@ -1,11 +1,11 @@
 [package]
 name = "rnifler"
 version = "1.1.0"
-edition = "2021"
+edition = "2026"
 # Version minimale de Rust : `slice::as_chunks` (src/checksum.rs) date de Rust 1.88.
 rust-version = "1.88"
 description = "rnifler, le renifleur : sniffer MQTT 3.1.1 défensif en Rust (capture, réassemblage TCP, décodage)"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 readme = "README.md"
 repository = "https://github.com/MkDriss/rnifler"
 keywords = ["mqtt", "pcap", "sniffer", "security", "iot"]
