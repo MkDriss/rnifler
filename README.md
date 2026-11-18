@@ -88,6 +88,7 @@ rnifler --read capture.pcap              # rejoue un fichier
 rnifler --read capture.pcap --local-ip 192.168.1.10
 rnifler -i lo --segments --hex           # détail de chaque segment TCP
 rnifler -i wlan0 -w captures/            # afficher et enregistrer en pcap
+rnifler -i wlan0 --promisc               # voir aussi le trafic entre stations WiFi
 ```
 
 | Option | Rôle |
@@ -102,6 +103,7 @@ rnifler -i wlan0 -w captures/            # afficher et enregistrer en pcap
 | `--hex` | affiche le contenu des segments en hexadécimal |
 | `--checksums` | `auto` (défaut), `all` ou `off` : voir ci-dessous |
 | `--local-ip` | adresse de la machine de capture (répétable) |
+| `--promisc` | mode promiscuité : capture aussi les trames échangées entre d'autres machines |
 | `--show-secrets` | affiche les mots de passe MQTT en clair |
 | `--list` | liste les interfaces disponibles |
 
@@ -113,6 +115,14 @@ l'*offload*, et l'interface loopback ne calcule jamais le checksum TCP. En
 mode `auto`, le sniffer vérifie donc les paquets reçus par les adresses de
 l'interface, ne vérifie rien sur loopback, et ne vérifie un fichier que si
 `--local-ip` est précisé.
+
+**Mode promiscuité.** Sans `--promisc`, l'interface ne remonte que les trames
+adressées à la machine de capture (ou diffusées à tout le réseau). Sur un
+point d'accès WiFi, le trafic échangé directement entre deux stations (par
+exemple entre un attaquant et un objet qu'il a isolé) passe donc inaperçu.
+Ce comportement a été constaté sur un Raspberry Pi 4 en mode point d'accès
+(hostapd, `ap_isolate=0`) : visibles avec le mode promiscuité, ces trames
+disparaissent sans lui.
 
 **Enregistrement.** Avec `--write`, chaque trame est enregistrée brute, avant
 l'analyse, dans des fichiers nommés d'après l'horodatage UTC de leur première

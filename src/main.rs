@@ -70,6 +70,11 @@ struct Args {
     #[arg(long)]
     show_secrets: bool,
 
+    /// Mode promiscuité : capture aussi les trames échangées entre d'autres
+    /// machines (par exemple entre deux stations d'un point d'accès WiFi)
+    #[arg(long, conflicts_with = "read")]
+    promisc: bool,
+
     /// Liste les interfaces disponibles puis quitte
     #[arg(long)]
     list: bool,
@@ -134,12 +139,19 @@ fn run_cli() -> Result<(), Box<dyn Error>> {
             writeln!(out, "[*] Fin du fichier : {seen} trame(s) lue(s)")?;
         }
         None => {
+            let mode = if args.promisc {
+                " (mode promiscuité)"
+            } else {
+                ""
+            };
             writeln!(
                 out,
-                "[*] Écoute sur {} | filtre BPF : \"{}\"",
+                "[*] Écoute sur {}{mode} | filtre BPF : \"{}\"",
                 args.interface, args.filter
             )?;
-            let cap = capture::open_live(&args.interface, &args.filter, 65535, 1000)?;
+            let mut options = capture::LiveOptions::default();
+            options.promiscuous = args.promisc;
+            let cap = capture::open_live_with(&args.interface, &args.filter, options)?;
             let device = capture::find_interface(&args.interface)?;
             let policy = checksum_policy(&args, Some(device), &mut out)?;
             run(cap, &args, policy, &mut out)?;
